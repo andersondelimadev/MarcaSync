@@ -4,7 +4,7 @@
  * sem desconto de 50%) é um produto já criado lá (scripts/produtos-abacatepay.mjs); aqui só se
  * escolhe qual cobrar. O preço sai do servidor, nunca do navegador.
  */
-import { SETUP_CENTAVOS } from "./planos";
+import { totalDoPedido } from "./planos";
 
 /** Até quantas parcelas o cartão aceita (a taxa do cartão por parcela fica com o MarcaSync). */
 export const PARCELAS_MAX_CARTAO = 3;
@@ -23,9 +23,12 @@ export function produtoDoPacote(e: EscolhaPacote): string {
   return `marcasync-registro-${gru}-${faixa}`;
 }
 
-/** O valor que o pacote deve ter: serviço mais a taxa do INPI. Usado para conferir o AbacatePay. */
-export function valorDoPacote(gruCentavos: number): number {
-  return SETUP_CENTAVOS + gruCentavos;
+/**
+ * O valor que o pagamento deve ter: serviço mais a taxa do INPI, de cada classe. Usado para
+ * conferir o AbacatePay (o produto é o de UMA classe; com mais classes vai a quantidade).
+ */
+export function valorDoPacote(gruCentavos: number, classes = 1): number {
+  return totalDoPedido(gruCentavos, classes);
 }
 
 /** O endereço público do site, para o AbacatePay devolver o cliente depois de pagar. */

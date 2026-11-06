@@ -9,6 +9,8 @@ import PlanoStep from "./PlanoStep";
 import PedidoStep, { type ResumoPedido } from "./PedidoStep";
 import ContatoStep from "./ContatoStep";
 import type { ColidenciaResultado } from "@/lib/colidencia";
+import { RESPOSTAS_VAZIAS, type RespostasQuestionario } from "@/lib/classes-tipos";
+import { temRespostas } from "@/lib/questionario-classes";
 import { linkWhatsapp } from "@/lib/whatsapp";
 import { pctDoRisco } from "@/lib/risco-area";
 import { avaliarAnterioridade, type AvisoAnterioridade } from "@/lib/anterioridade";
@@ -44,6 +46,8 @@ export default function MarcaSyncApp() {
   const [marca, setMarca] = useState("");
   const [descricao, setDescricao] = useState("");
   const [colidencia, setColidencia] = useState<ColidenciaResultado | null>(null);
+  // O que a pessoa respondeu no questionário que afina as classes de Nice.
+  const [respostasClasses, setRespostasClasses] = useState<RespostasQuestionario>(RESPOSTAS_VAZIAS);
   const [monitoramento, setMonitoramento] = useState(true);
   // true quando o cliente chegou ao contato passando pelo Plano (muda a mensagem do WhatsApp)
   const [planoEscolhido, setPlanoEscolhido] = useState(false);
@@ -82,9 +86,18 @@ export default function MarcaSyncApp() {
       marca: dados.marca,
       descricao: dados.descricao,
     });
+    // As respostas das perguntas das classes vão junto (se a pessoa respondeu alguma).
+    if (temRespostas(respostasClasses)) params.set("q", JSON.stringify(respostasClasses));
     colidenciaPromiseRef.current = fetch(`/api/colidencia?${params}`).then((r) => r.json());
 
     setPhase("carregando");
+  }
+
+  /** Os parâmetros da consulta atual (marca, descrição e, se houver, as respostas das classes). */
+  function consultaParams(): URLSearchParams {
+    const params = new URLSearchParams({ marca, descricao });
+    if (temRespostas(respostasClasses)) params.set("q", JSON.stringify(respostasClasses));
+    return params;
   }
 
   async function handleLoadingDone() {
@@ -92,9 +105,7 @@ export default function MarcaSyncApp() {
     try {
       resultado = colidenciaPromiseRef.current
         ? await colidenciaPromiseRef.current
-        : await fetch(`/api/colidencia?${new URLSearchParams({ marca, descricao })}`).then((r) =>
-            r.json()
-          );
+        : await fetch(`/api/colidencia?${consultaParams()}`).then((r) => r.json());
     } catch {
       setErroSalvar("Falha ao buscar a colidência (rede indisponível).");
       setPhase("consulta");
@@ -126,7 +137,8 @@ export default function MarcaSyncApp() {
             whatsapp: whatsapp.trim(),
             marca,
             descricao,
-            nclCode: colidencia.ncl.code,
+            // Todas as classes marcadas ("30,35"); a primeira é a que o pedido registra.
+            nclCode: colidencia.classesEscolhidas.length > 0 ? colidencia.classesEscolhidas.join(",") : colidencia.ncl.code,
             nclLabel: colidencia.ncl.label,
             riscoPct: pctDoRisco(colidencia.risco),
             riscoFonte: colidencia.fonte,
@@ -197,6 +209,7 @@ export default function MarcaSyncApp() {
     colidenciaPromiseRef.current = null;
     setResumoPedido(null);
     setColidencia(null);
+    setRespostasClasses(RESPOSTAS_VAZIAS);
     setPlanoEscolhido(false);
     setProcessoId(null);
     setErroSalvar(null);
@@ -256,7 +269,13 @@ export default function MarcaSyncApp() {
         )}
 
         {phase === "consulta" && (
-          <ConsultaStep marca={marca} descricao={descricao} onAnalisar={handleAnalisar} />
+          <ConsultaStep
+            marca={marca}
+            descricao={descricao}
+            onAnalisar={handleAnalisar}
+            respostas={respostasClasses}
+            onRespostas={setRespostasClasses}
+          />
         )}
         {phase === "carregando" && <LoadingStep marca={marca} onDone={handleLoadingDone} />}
         {phase === "resultado" && colidencia && (
@@ -265,6 +284,7 @@ export default function MarcaSyncApp() {
             aviso={aviso}
             colidencia={colidencia}
             onColidenciaAtualizada={setColidencia}
+            respostas={respostasClasses}
             onRefazer={() => {
               setCurrent(0);
               setPhase("consulta");
@@ -285,6 +305,7 @@ export default function MarcaSyncApp() {
             onConfirmar={handleVerPedido}
             onFalarPrimeiro={handleContato}
             whatsappHref={hrefPlano}
+            classes={colidencia?.classesEscolhidas ?? []}
           />
         )}
         {phase === "pedido" && (
@@ -292,6 +313,7 @@ export default function MarcaSyncApp() {
             processoId={processoId}
             marca={marca}
             classeSugerida={colidencia?.ncl.code ?? ""}
+            classesEscolhidas={colidencia?.classesEscolhidas ?? []}
             aviso={aviso}
             monitoramento={monitoramento}
             onVoltar={() => {

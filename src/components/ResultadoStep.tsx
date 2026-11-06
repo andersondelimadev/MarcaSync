@@ -7,6 +7,9 @@ import { riskTier } from "@/lib/fonetica";
 import { agruparPorArea } from "@/lib/classes";
 import type { ColidenciaMatch, ColidenciaResultado, FonteColidencia } from "@/lib/colidencia";
 import TrackView from "./TrackView";
+import ClassesSugeridas from "./ClassesSugeridas";
+import { temRespostas } from "@/lib/questionario-classes";
+import type { RespostasQuestionario } from "@/lib/classes-tipos";
 import { track } from "@/lib/track";
 
 /** Quantas marcas mostrar por grupo (o servidor já entrega no máximo 10 no total). */
@@ -72,6 +75,8 @@ interface ResultadoStepProps {
   aviso: AvisoAnterioridade;
   colidencia: ColidenciaResultado;
   onColidenciaAtualizada: (c: ColidenciaResultado) => void;
+  /** Respostas das perguntas da consulta: vão junto quando se busca outro termo. */
+  respostas: RespostasQuestionario;
   onRefazer: () => void;
   onVerPlano: () => void;
   /** Link wa.me pro WhatsApp do MarcaSync; null se o número não estiver configurado. */
@@ -83,11 +88,15 @@ export default function ResultadoStep({
   aviso,
   colidencia,
   onColidenciaAtualizada,
+  respostas,
   onRefazer,
   onVerPlano,
   whatsappHref,
 }: ResultadoStepProps) {
-  const { matches, ncl, fonte, avisoFonteReal, termo, baseLocal, risco } = colidencia;
+  const { matches, ncl, fonte, avisoFonteReal, termo, baseLocal, risco, classesEscolhidas } =
+    colidencia;
+  // "NCL 30" ou "NCL 30, 35": o texto do ramo vale para todas as classes marcadas.
+  const rotuloClasses = classesEscolhidas.length > 0 ? classesEscolhidas.join(", ") : ncl.code;
   const grupos = agruparPorArea(matches);
   // `principal` é a marca que define o nível de colisão: a mais parecida entre as do mesmo
   // ramo e as sem classe (que não dá para descartar). Sem separação por ramo, é a `top`.
@@ -116,6 +125,7 @@ export default function ResultadoStep({
     setErroBusca(null);
     try {
       const params = new URLSearchParams({ marca: alvo, descricao });
+      if (temRespostas(respostas)) params.set("q", JSON.stringify(respostas));
       const res = await fetch(`/api/colidencia?${params.toString()}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Falha na busca.");
@@ -218,18 +228,24 @@ export default function ResultadoStep({
           </div>
         )}
         <div className="metric">
-          <div className="lbl">Classe sugerida</div>
+          <div className="lbl">{classesEscolhidas.length > 1 ? "Classes escolhidas" : "Classe sugerida"}</div>
           <div className="val" style={{ fontSize: 18 }}>
-            NCL {ncl.code}
+            NCL {rotuloClasses}
           </div>
           <div className="sub">
-            {ncl.label}{" "}
+            {classesEscolhidas.length > 1 ? `${classesEscolhidas.length} classes marcadas abaixo` : ncl.label}{" "}
             <span className="pill accent" style={{ marginLeft: 4 }}>
               confiança {ncl.confidence}
             </span>
           </div>
         </div>
       </div>
+
+      <ClassesSugeridas
+        colidencia={colidencia}
+        onColidenciaAtualizada={onColidenciaAtualizada}
+        onMudarRespostas={onRefazer}
+      />
 
       {/* CTA no topo: quem já viu o resultado resumido não precisa rolar a lista inteira. */}
       <div className="cta-topo">
@@ -258,13 +274,13 @@ export default function ResultadoStep({
         <div style={{ marginBottom: 24 }}>
           <p className="help" style={{ marginBottom: 16 }}>
             Separamos as marcas parecidas pelo ramo: &quot;mesmo ramo&quot; quer dizer a mesma
-            classe de Nice que a sua (NCL {ncl.code}). O INPI também compara classes relacionadas,
+            classe de Nice que a sua (NCL {rotuloClasses}). O INPI também compara classes relacionadas,
             por isso eu confirmo isso com você antes do protocolo.
           </p>
 
           <section className="wave-section" aria-labelledby="grupo-mesmo-ramo">
             <h3 id="grupo-mesmo-ramo">
-              No seu ramo (NCL {ncl.code}){" "}
+              No seu ramo (NCL {rotuloClasses}){" "}
               <span className={`pill ${grupos.mesmaArea.length > 0 ? "risk" : "safe"}`}>
                 {grupos.mesmaArea.length}
               </span>
@@ -274,7 +290,7 @@ export default function ResultadoStep({
               <TabelaMarcas lista={grupos.mesmaArea.slice(0, MAX_POR_GRUPO)} fonte={fonte} />
             ) : (
               <p style={{ fontSize: 13, color: "var(--ink-dim)" }}>
-                Nenhuma das marcas parecidas encontradas está na classe NCL {ncl.code}.
+                Nenhuma das marcas parecidas encontradas está na classe NCL {rotuloClasses}.
               </p>
             )}
           </section>

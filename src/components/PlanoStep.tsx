@@ -5,7 +5,14 @@ import GarantiaDevolucao from "./GarantiaDevolucao";
 import TrackView from "./TrackView";
 import { track } from "@/lib/track";
 import { formatarWhatsapp, whatsappValido } from "@/lib/whatsapp";
-import { MONITORAMENTO_CENTAVOS, SETUP_CENTAVOS, fmtReais, fmtReaisCurto } from "@/lib/planos";
+import {
+  MONITORAMENTO_CENTAVOS,
+  SETUP_CENTAVOS,
+  fmtReais,
+  fmtReaisCurto,
+  totalDoPedido,
+} from "@/lib/planos";
+import { GRU_DESCONTO_PCT, calcularGru } from "@/lib/gru";
 
 interface PlanoStepProps {
   nomeCliente: string;
@@ -22,6 +29,8 @@ interface PlanoStepProps {
   onFalarPrimeiro: () => void;
   /** Link wa.me já com o plano escolhido; null se o número não estiver configurado. */
   whatsappHref: string | null;
+  /** As classes marcadas no resultado: cada uma é um protocolo, cobrado no mesmo pagamento. */
+  classes: string[];
 }
 
 const ERRO_WHATSAPP =
@@ -38,8 +47,15 @@ export default function PlanoStep({
   onConfirmar,
   onFalarPrimeiro,
   whatsappHref,
+  classes,
 }: PlanoStepProps) {
   const [erroContato, setErroContato] = useState<string | null>(null);
+  // Só para mostrar o total: o desconto de verdade é conferido no pedido, pelos dados do titular.
+  const [comDesconto, setComDesconto] = useState(true);
+  const gru = calcularGru(comDesconto ? "microempresa" : "outra_empresa", false);
+  const qtd = Math.max(1, classes.length);
+  const totalHoje = totalDoPedido(gru.centavos, qtd);
+  const porClasse = qtd > 1 ? ` (${qtd} classes × ${fmtReais(SETUP_CENTAVOS + gru.centavos)})` : "";
   const nomeRef = useRef<HTMLInputElement>(null);
   const whatsappRef = useRef<HTMLInputElement>(null);
 
@@ -65,9 +81,9 @@ export default function PlanoStep({
       <div className="panel-head">
         <h2>Plano de registro</h2>
         <p className="help" style={{ maxWidth: "none" }}>
-          O serviço do MarcaSync tem preço fechado: {fmtReais(SETUP_CENTAVOS)}, sem orçamento e sem
-          precisar falar com ninguém antes. Ele cobre a análise que você acabou de ver, a petição, a
-          procuração e o protocolo do pedido no INPI. A taxa oficial do INPI (GRU) é paga junto, no
+          O serviço do MarcaSync tem preço fechado: {fmtReais(SETUP_CENTAVOS)} por classe, sem
+          orçamento e sem precisar falar com ninguém antes. Ele cobre a análise que você acabou de
+          ver, a petição, a procuração e o protocolo do pedido no INPI (cada classe é um protocolo). A taxa oficial do INPI (GRU) é paga junto, no
           mesmo pagamento (Pix ou cartão), e o valor exato aparece antes de você confirmar. O
           monitoramento da RPI é opcional e você desliga quando quiser.
         </p>
@@ -128,22 +144,84 @@ export default function PlanoStep({
         )}
       </div>
 
+      <div className="resumo-preco" aria-labelledby="resumo-preco-titulo">
+        <h3 id="resumo-preco-titulo">Quanto você paga</h3>
+        <fieldset className="resumo-escolha">
+          <legend>Quem vai ser o titular da marca?</legend>
+          <label className={`chip${comDesconto ? " on" : ""}`}>
+            <input
+              type="radio"
+              name="titular-desconto"
+              checked={comDesconto}
+              onChange={() => setComDesconto(true)}
+            />
+            <span>Pessoa física, MEI, ME ou EPP</span>
+          </label>
+          <label className={`chip${!comDesconto ? " on" : ""}`}>
+            <input
+              type="radio"
+              name="titular-desconto"
+              checked={!comDesconto}
+              onChange={() => setComDesconto(false)}
+            />
+            <span>Outra empresa</span>
+          </label>
+        </fieldset>
+        <dl className="resumo-linhas">
+          {qtd > 1 && (
+            <div>
+              <dt>Classes escolhidas</dt>
+              <dd>
+                {classes.map((c) => `NCL ${c}`).join(", ")} · {qtd} protocolos
+              </dd>
+            </div>
+          )}
+          <div>
+            <dt>
+              Serviço do MarcaSync
+              {qtd > 1 ? `, ${qtd} × ${fmtReais(SETUP_CENTAVOS)}` : ""}
+            </dt>
+            <dd className="tab-nums">{fmtReais(SETUP_CENTAVOS * qtd)}</dd>
+          </div>
+          <div>
+            <dt>
+              Taxa do INPI (GRU)
+              {qtd > 1 ? `, ${qtd} × ${fmtReais(gru.centavos)}` : ""}
+              {gru.comDesconto ? ` — com ${GRU_DESCONTO_PCT}% de desconto` : ""}
+            </dt>
+            <dd className="tab-nums">{fmtReais(gru.centavos * qtd)}</dd>
+          </div>
+          <div className="resumo-total">
+            <dt>Total hoje, no Pix ou cartão{qtd > 1 ? ", um pagamento só" : ""}</dt>
+            <dd className="tab-nums">{fmtReais(totalHoje)}</dd>
+          </div>
+          {monitoramento ? (
+            <div>
+              <dt>Monitoramento da RPI, cobrado depois</dt>
+              <dd className="tab-nums">{fmtReais(MONITORAMENTO_CENTAVOS)}/mês</dd>
+            </div>
+          ) : (
+            <div>
+              <dt>Monitoramento da RPI</dt>
+              <dd>não contratado</dd>
+            </div>
+          )}
+        </dl>
+        <p className="resumo-nota">
+          O total de hoje cobre o serviço e a taxa do INPI numa cobrança só.{" "}
+          {monitoramento
+            ? "O monitoramento só começa a ser cobrado a partir da publicação do pedido e você cancela quando quiser. "
+            : "Você pode contratar o monitoramento aqui embaixo, quando quiser. "}
+          O valor final é conferido no pedido, com os dados do titular, e sai igual ao que você vê
+          antes de pagar.
+        </p>
+      </div>
+
       <div className="summary-strip">
         <div className="total">
-          <div className="lbl">Serviço hoje</div>
+          <div className="lbl">Total hoje{porClasse}</div>
           <div className="amt tab-nums">
-            {fmtReais(SETUP_CENTAVOS)}
-            <span
-              style={{
-                fontSize: 12.5,
-                color: "var(--ink-dim)",
-                fontFamily: "var(--font-body)",
-                fontWeight: 500,
-              }}
-            >
-              {" "}
-              + taxa do INPI (GRU)
-            </span>
+            {fmtReais(totalHoje)}
             {monitoramento && (
               <span
                 style={{
@@ -206,7 +284,7 @@ export default function PlanoStep({
         <div className="plan-card">
           <h3>Setup — Análise e Protocolo</h3>
           <div className="price">
-            {fmtReaisCurto(SETUP_CENTAVOS)} <small>pagamento único</small>
+            {fmtReaisCurto(SETUP_CENTAVOS)} <small>por classe, pagamento único</small>
           </div>
           <ul>
             <li>Busca de anterioridade fonética</li>

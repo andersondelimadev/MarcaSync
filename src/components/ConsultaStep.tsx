@@ -2,14 +2,25 @@
 
 import { useState } from "react";
 import { track } from "@/lib/track";
+import QuestionarioClasses from "./QuestionarioClasses";
+import type { RespostasQuestionario } from "@/lib/classes-tipos";
 
 interface ConsultaStepProps {
   marca: string;
   descricao: string;
   onAnalisar: (dados: { marca: string; descricao: string }) => void;
+  /** O que a pessoa respondeu nas perguntas das classes (moram no componente de cima). */
+  respostas: RespostasQuestionario;
+  onRespostas: (r: RespostasQuestionario) => void;
 }
 
-export default function ConsultaStep({ marca, descricao, onAnalisar }: ConsultaStepProps) {
+export default function ConsultaStep({
+  marca,
+  descricao,
+  onAnalisar,
+  respostas,
+  onRespostas,
+}: ConsultaStepProps) {
   const [localMarca, setLocalMarca] = useState(marca);
   const [localDescricao, setLocalDescricao] = useState(descricao);
 
@@ -46,19 +57,6 @@ export default function ConsultaStep({ marca, descricao, onAnalisar }: ConsultaS
               placeholder="Ex.: confeitaria artesanal, venda de bolos sob encomenda..."
             />
           </div>
-          <button
-            className="btn"
-            disabled={!podeAnalisar}
-            onClick={() => {
-              track("consulta_enviada");
-              onAnalisar({
-                marca: localMarca.trim(),
-                descricao: localDescricao.trim(),
-              });
-            }}
-          >
-            Ver o resultado →
-          </button>
         </div>
         <div className="helpbox">
           <h3>O que acontece nesta etapa</h3>
@@ -68,8 +66,8 @@ export default function ConsultaStep({ marca, descricao, onAnalisar }: ConsultaS
               depositadas, não só letra por letra.
             </li>
             <li>
-              <b>Inferência de classe NCL</b> — a classe de Nice mais provável (hoje cobrimos as 11
-              mais comuns)
+              <b>Classes de Nice</b> — de 1 a 5 classes que combinam com o seu negócio, a partir da
+              descrição e das perguntas rápidas abaixo (as 45 classes do INPI)
             </li>
             <li>
               <b>Leitura da RPI</b> — a mesma fonte oficial alimenta o monitoramento (semanal, e depois mensal) caso
@@ -81,6 +79,29 @@ export default function ConsultaStep({ marca, descricao, onAnalisar }: ConsultaS
             </li>
           </ol>
         </div>
+      </div>
+
+      <QuestionarioClasses respostas={respostas} onRespostas={onRespostas} />
+
+      <div style={{ marginTop: 20 }}>
+        <button
+          className="btn"
+          disabled={!podeAnalisar}
+          onClick={() => {
+            track("consulta_enviada");
+            onAnalisar({
+              marca: localMarca.trim(),
+              descricao: localDescricao.trim(),
+            });
+          }}
+        >
+          Ver o resultado →
+        </button>
+        {!podeAnalisar && (
+          <span style={{ marginLeft: 12, fontSize: 13, color: "var(--ink-dim)" }}>
+            Diga o nome da marca para continuar.
+          </span>
+        )}
       </div>
     </>
   );

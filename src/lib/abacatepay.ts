@@ -293,12 +293,14 @@ export async function criarCheckout(entrada: {
   metadata?: Record<string, string>;
   urlDeRetorno: string;
   parcelasMax: number;
+  /** Quantas classes (cada uma é um protocolo): o AbacatePay multiplica o preço do produto. */
+  quantidade?: number;
   /** O pagador já cadastrado no AbacatePay (ver `criarPagador`): ele não digita os dados de novo. */
   pagadorId?: string;
 }): Promise<Checkout> {
   const produto = await idDoProduto(entrada.produtoExternalId);
   const d = await chamar<DadosCheckout>("POST", "/checkouts/create", {
-    items: [{ id: produto, quantity: 1 }],
+    items: [{ id: produto, quantity: entrada.quantidade ?? 1 }],
     methods: ["PIX", "CARD"],
     card: { maxInstallments: entrada.parcelasMax, passFeesToCustomer: false },
     ...(entrada.pagadorId ? { customerId: entrada.pagadorId } : {}),

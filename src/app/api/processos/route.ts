@@ -170,7 +170,11 @@ export async function POST(request: Request) {
       clienteId: cliente.id,
       marca,
       descricao,
-      nclCode: typeof body.nclCode === "string" && /^\d{1,2}$/.test(body.nclCode) ? body.nclCode : null,
+      // Uma classe ("30") ou até 5 ("30,35,39"): as que a pessoa marcou no resultado.
+      nclCode:
+        typeof body.nclCode === "string" && /^\d{1,2}(,\d{1,2}){0,4}$/.test(body.nclCode)
+          ? body.nclCode
+          : null,
       nclLabel: texto(body.nclLabel)?.slice(0, LIMITES.rotuloClasse) ?? null,
       riscoPct:
         typeof body.riscoPct === "number" && Number.isFinite(body.riscoPct)

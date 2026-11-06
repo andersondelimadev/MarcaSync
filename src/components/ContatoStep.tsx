@@ -96,19 +96,33 @@ export default function ContatoStep({
           <table style={{ width: "100%", fontSize: 14 }}>
             <tbody>
               <tr>
-                <td>Serviço MarcaSync</td>
+                <td>
+                  Serviço MarcaSync
+                  {resumo.classes > 1
+                    ? `, ${resumo.classes} classes × ${fmtReais(resumo.servicoCentavos)}`
+                    : ""}
+                </td>
                 <td className="tab-nums" style={{ textAlign: "right" }}>
-                  {fmtReais(resumo.servicoCentavos)}
+                  {fmtReais(resumo.servicoCentavos * resumo.classes)}
                 </td>
               </tr>
               <tr>
-                <td>Taxa do INPI (GRU){resumo.gruComDesconto ? " — com 50% de desconto" : ""}</td>
+                <td>
+                  Taxa do INPI (GRU)
+                  {resumo.classes > 1
+                    ? `, ${resumo.classes} classes × ${fmtReais(resumo.gruCentavos)}`
+                    : ""}
+                  {resumo.gruComDesconto ? " — com 50% de desconto" : ""}
+                </td>
                 <td className="tab-nums" style={{ textAlign: "right" }}>
-                  {fmtReais(resumo.gruCentavos)}
+                  {fmtReais(resumo.gruCentavos * resumo.classes)}
                 </td>
               </tr>
               <tr style={{ fontWeight: 600 }}>
-                <td>Total para registrar</td>
+                <td>
+                  Total para registrar
+                  {resumo.classes > 1 ? ` (${resumo.classes} protocolos num pagamento só)` : ""}
+                </td>
                 <td className="tab-nums" style={{ textAlign: "right" }}>
                   {fmtReais(resumo.totalCentavos)}
                 </td>

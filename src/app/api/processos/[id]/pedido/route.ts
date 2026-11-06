@@ -6,7 +6,7 @@ import { garantirCobrancas } from "@/lib/cobranca";
 import { calcularGru } from "@/lib/gru";
 import { barrarSeExceder } from "@/lib/limite-publico";
 import { validarPedido, type PedidoEntrada } from "@/lib/pedido";
-import { MONITORAMENTO_CENTAVOS, SETUP_CENTAVOS } from "@/lib/planos";
+import { MONITORAMENTO_CENTAVOS, SETUP_CENTAVOS, listarClasses, totalDoPedido } from "@/lib/planos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,6 +97,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const gru = calcularGru(d.regime, d.participaEmpresaDoRamo, d.especificacaoLivre);
+  // Cada classe marcada é um protocolo, cobrado no mesmo pagamento. A lista vem do navegador (a
+  // pessoa pode ter mudado as classes depois de o processo ser criado), mas é validada aqui e o
+  // preço é sempre calculado pelo servidor.
+  const enviadas = listarClasses((corpo as { classesEscolhidas?: unknown }).classesEscolhidas);
+  const listaClasses = enviadas.length > 0 ? enviadas : listarClasses(processo.nclCode);
+  const classes = Math.max(1, listaClasses.length);
   const dadosPedido = {
     tipoRequerente: d.tipoRequerente,
     regime: d.regime,
@@ -139,7 +145,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }),
     prisma.processo.update({
       where: { id },
-      data: { status: "pedido", monitoramento: d.monitoramento },
+      data: {
+        status: "pedido",
+        monitoramento: d.monitoramento,
+        // A lista de classes que vale para a cobrança fica anotada no processo.
+        ...(listaClasses.length > 0 ? { nclCode: listaClasses.join(",") } : {}),
+      },
     }),
   ];
 
@@ -147,7 +158,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // servidor. Se já houver uma cobrança pendente com outro valor (dado antigo ou adulterado) ou do
   // modelo antigo (serviço e taxa separados), ela é trocada e o checkout é refeito.
   const refazCheckout = { provedorId: null, checkoutUrl: null, brCode: null, expiraEm: null };
-  const totalPacote = SETUP_CENTAVOS + gru.centavos;
+  const totalPacote = totalDoPedido(gru.centavos, classes);
   for (const antigo of processo.pagamentos.filter(
     (p) => (p.tipo === "setup" || p.tipo === "gru") && p.status === "pendente"
   )) {
@@ -210,7 +221,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         gruCentavos: gru.centavos,
         gruComDesconto: gru.comDesconto,
         especificacaoLivre: d.especificacaoLivre,
-        totalCentavos: SETUP_CENTAVOS + gru.centavos,
+        classes,
+        totalCentavos: totalPacote,
         monitoramento: d.monitoramento,
         monitoramentoCentavos: d.monitoramento ? MONITORAMENTO_CENTAVOS : 0,
       },

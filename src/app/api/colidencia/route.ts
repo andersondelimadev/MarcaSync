@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { calcularColidencia } from "@/lib/colidencia";
 import { barrarSeExceder } from "@/lib/limite-publico";
+import { validarRespostas } from "@/lib/questionario-classes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/colidencia?marca=...&descricao=...
+ * GET /api/colidencia?marca=...&descricao=...[&q=<respostas do questionário, em JSON>]
  *
  * Busca de anterioridade unificada: tenta a base real do INPI primeiro,
  * cai pra demonstração de exemplo só se a busca real falhar de verdade —
@@ -30,6 +31,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Marca ou descrição grande demais." }, { status: 400 });
   }
 
-  const resultado = await calcularColidencia(marca, descricao);
+  // As respostas do questionário de classes são opcionais; se vierem tortas, são ignoradas.
+  const bruto = searchParams.get("q");
+  let respostas;
+  if (bruto) {
+    if (bruto.length > 3000) {
+      return NextResponse.json({ error: "Respostas grandes demais." }, { status: 400 });
+    }
+    try {
+      respostas = validarRespostas(JSON.parse(bruto)) ?? undefined;
+    } catch {
+      respostas = undefined;
+    }
+  }
+
+  const resultado = await calcularColidencia(marca, descricao, respostas);
   return NextResponse.json(resultado);
 }

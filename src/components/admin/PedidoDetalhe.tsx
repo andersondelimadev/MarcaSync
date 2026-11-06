@@ -19,6 +19,7 @@ export default function PedidoDetalhe({
   prontidao,
   temImagem,
   marca,
+  classes = 1,
   rotulo,
   aberto,
 }: {
@@ -27,6 +28,8 @@ export default function PedidoDetalhe({
   prontidao: Prontidao | null;
   temImagem: boolean;
   marca: string;
+  /** Quantas classes (protocolos) o pagamento cobre. */
+  classes?: number;
   rotulo: string;
   /** Começa aberto (o botão "abrir tudo" do painel). */
   aberto: boolean;
@@ -50,8 +53,14 @@ export default function PedidoDetalhe({
       "GRU a emitir",
       `serviço ${d.especificacaoLivre ? "394 (especificação livre)" : "389 (especificação pré-aprovada)"}, ${fmtReais(d.gruCentavos)}${d.gruComDesconto ? " (com 50% de desconto)" : ""}; confirme o valor na tela de emissão`,
     ],
-    ["Serviço MarcaSync", fmtReais(d.servicoCentavos)],
-    ["Total cobrado do cliente", fmtReais(d.servicoCentavos + d.gruCentavos)],
+    [
+      "Classes (protocolos)",
+      classes > 1
+        ? `${classes}: um protocolo e uma GRU para cada; este pedido traz os dados de uma classe, a lista das outras combine com o cliente`
+        : "1",
+    ],
+    ["Serviço MarcaSync", fmtReais(d.servicoCentavos * classes)],
+    ["Total cobrado do cliente", fmtReais((d.servicoCentavos + d.gruCentavos) * classes)],
     ["Aceites dados em", fmtDataHora(d.aceitoEm)],
     ["Pedido criado em", fmtDataHora(d.createdAt)],
     ["Pedido atualizado em", fmtDataHora(d.updatedAt)],
