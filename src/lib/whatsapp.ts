@@ -54,7 +54,11 @@ export function mensagemWhatsapp(d: DadosContato): string {
   const linhas = [
     `${d.nomeCliente.trim() ? `Olá! Aqui é ${d.nomeCliente.trim()}.` : "Olá!"} Acabei de consultar a marca "${d.marca}" no MarcaSync.`,
     linhaRisco(d.colidencia),
-    d.colidencia ? `Classe sugerida: NCL ${d.colidencia.ncl.code}.` : null,
+    d.colidencia
+      ? d.colidencia.classesEscolhidas.length > 1
+        ? `Classes escolhidas: NCL ${d.colidencia.classesEscolhidas.join(", ")}.`
+        : `Classe sugerida: NCL ${d.colidencia.ncl.code}.`
+      : null,
     d.plano
       ? `Plano: setup ${fmtReais(SETUP_CENTAVOS)}${
           d.plano.monitoramento ? ` + monitoramento ${fmtReais(MONITORAMENTO_CENTAVOS)}/mês` : ""

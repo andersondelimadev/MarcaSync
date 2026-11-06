@@ -13,7 +13,7 @@ import {
   situacaoDoPagamento,
 } from "@/lib/admin-dados";
 import { descreverSituacao } from "@/lib/situacoes-inpi";
-import { fmtReais } from "@/lib/planos";
+import { contarClasses, fmtReais } from "@/lib/planos";
 import { linkParaCliente } from "@/lib/whatsapp";
 import PedidoDetalhe from "./PedidoDetalhe";
 import type { Processo } from "./tipos";
@@ -272,9 +272,15 @@ export default function ProcessoCard({
                         style={BOTAO_PEQUENO}
                         disabled={a.confirmando === pg.id}
                         title="A taxa já foi paga ao INPI: só o serviço volta, por Pix seu"
-                        onClick={() => a.onDevolucao(pg.id, p.pedidoRegistro?.servicoCentavos ?? 0)}
+                        onClick={() =>
+                          a.onDevolucao(
+                            pg.id,
+                            (p.pedidoRegistro?.servicoCentavos ?? 0) * contarClasses(p.nclCode)
+                          )
+                        }
                       >
-                        Registrei a devolução do serviço ({fmtReais(p.pedidoRegistro.servicoCentavos)})
+                        Registrei a devolução do serviço (
+                        {fmtReais(p.pedidoRegistro.servicoCentavos * contarClasses(p.nclCode))})
                       </button>
                     )}
                 </>
@@ -388,6 +394,7 @@ export default function ProcessoCard({
             prontidao={p.prontidao}
             temImagem={p.imagemMarca !== null}
             marca={p.marca}
+            classes={contarClasses(p.nclCode)}
             rotulo="Dados completos do titular e da marca (para o INPI)"
             aberto={aberto}
           />

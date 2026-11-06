@@ -25,6 +25,22 @@ export function mesmaArea(
   return classes.includes(classeSugerida);
 }
 
+/**
+ * Como `mesmaArea`, mas para quem vai registrar em mais de uma classe: a marca é "do mesmo ramo"
+ * se alguma das classes dela for uma das classes do cliente. Sem classes do cliente (nada
+ * confiável sugerido), ou marca sem classe informada, não dá para dizer: null.
+ */
+export function mesmaAreaEmAlguma(
+  classeDaMarca: string | null,
+  classesDoCliente: string[],
+  confianca: "alta" | "baixa"
+): boolean | null {
+  if (confianca === "baixa" || classesDoCliente.length === 0) return null;
+  const classes = listarClasses(classeDaMarca);
+  if (classes.length === 0) return null;
+  return classes.some((c) => classesDoCliente.includes(c));
+}
+
 export interface GruposPorArea<T> {
   /** Marcas da mesma classe que o cliente quer registrar (`mesmaArea === true`). */
   mesmaArea: T[];

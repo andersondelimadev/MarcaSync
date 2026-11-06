@@ -143,7 +143,26 @@ describe("GET /api/colidencia", () => {
 
   it("busca normal funciona", async () => {
     expect((await buscar("?marca=Kaza%20Doce&descricao=bolos")).status).toBe(200);
-    expect(mocks.calcularColidencia).toHaveBeenCalledWith("Kaza Doce", "bolos");
+    expect(mocks.calcularColidencia).toHaveBeenCalledWith("Kaza Doce", "bolos", undefined);
+  });
+
+  it("repassa as respostas do questionário de classes, já conferidas", async () => {
+    const q = encodeURIComponent(
+      JSON.stringify({ escolhas: { negocio: ["comida", "inventada"], pergunta_falsa: ["x"] }, extra: "  bolos  " })
+    );
+    expect((await buscar(`?marca=Kaza&descricao=bolos&q=${q}`)).status).toBe(200);
+    expect(mocks.calcularColidencia).toHaveBeenCalledWith("Kaza", "bolos", {
+      escolhas: { negocio: ["comida"] },
+      extra: "bolos",
+    });
+  });
+
+  it("respostas quebradas são ignoradas; respostas enormes são recusadas", async () => {
+    expect((await buscar("?marca=Kaza&q=%7Bnao-e-json")).status).toBe(200);
+    expect(mocks.calcularColidencia).toHaveBeenLastCalledWith("Kaza", "", undefined);
+    mocks.calcularColidencia.mockClear();
+    expect((await buscar(`?marca=Kaza&q=${"a".repeat(3001)}`)).status).toBe(400);
+    expect(mocks.calcularColidencia).not.toHaveBeenCalled();
   });
 
   it("freia o excesso de buscas do mesmo IP (30 por minuto)", async () => {

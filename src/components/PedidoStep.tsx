@@ -12,7 +12,7 @@ import type { AvisoAnterioridade } from "@/lib/anterioridade";
 import { detectarPalavraEstrangeira } from "@/lib/idioma";
 import { CLASSES_DE_PRODUTOS, CLASSES_DE_SERVICOS, rotuloDaClasse } from "@/lib/classes-nice";
 import { REGIMES, REGIMES_PJ, ROTULO_REGIME, calcularGru, type Regime } from "@/lib/gru";
-import { MONITORAMENTO_CENTAVOS, SETUP_CENTAVOS, fmtReais } from "@/lib/planos";
+import { MONITORAMENTO_CENTAVOS, SETUP_CENTAVOS, fmtReais, totalDoPedido } from "@/lib/planos";
 import {
   APRESENTACOES,
   ROTULO_APRESENTACAO,
@@ -29,6 +29,8 @@ export interface ResumoPedido {
   gruCentavos: number;
   gruComDesconto: boolean;
   especificacaoLivre: boolean;
+  /** Quantas classes (protocolos) o pagamento cobre. */
+  classes: number;
   totalCentavos: number;
   monitoramento: boolean;
   monitoramentoCentavos: number;
@@ -38,6 +40,8 @@ interface PedidoStepProps {
   processoId: string | null;
   marca: string;
   classeSugerida: string;
+  /** Todas as classes que a pessoa marcou no resultado (a primeira é a deste pedido). */
+  classesEscolhidas: string[];
   /** O aviso de marca anterior parecida (nivel "nenhum" quando não há). */
   aviso: AvisoAnterioridade;
   monitoramento: boolean;
@@ -112,6 +116,7 @@ export default function PedidoStep({
   processoId,
   marca,
   classeSugerida,
+  classesEscolhidas,
   aviso,
   monitoramento,
   onVoltar,
@@ -133,7 +138,9 @@ export default function PedidoStep({
     uf: "",
     apresentacao: "nominativa" as Apresentacao,
     elementoNominativo: marca,
-    classeNice: /^\d{1,2}$/.test(classeSugerida) ? String(Number(classeSugerida)) : "",
+    classeNice: /^\d{1,2}$/.test(classesEscolhidas[0] ?? classeSugerida)
+      ? String(Number(classesEscolhidas[0] ?? classeSugerida))
+      : "",
     especificacaoItens: [] as string[],
     palavraEstrangeira: null as boolean | null,
     traducao: "",
@@ -158,7 +165,9 @@ export default function PedidoStep({
   const precisaImagem = f.apresentacao !== "nominativa";
   const avisoAtivo = aviso.nivel !== "nenhum";
   const suspeitaIdioma = detectarPalavraEstrangeira(f.elementoNominativo);
-  const total = SETUP_CENTAVOS + gru.centavos;
+  // Cada classe marcada é um protocolo, no mesmo pagamento.
+  const qtdClasses = Math.max(1, classesEscolhidas.length);
+  const total = totalDoPedido(gru.centavos, qtdClasses);
 
   function set<K extends keyof typeof f>(campo: K, valor: (typeof f)[K]) {
     setF((antes) => ({ ...antes, [campo]: valor }));
@@ -207,7 +216,7 @@ export default function PedidoStep({
       const res = await fetch(`/api/processos/${processoId}/pedido`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entrada),
+        body: JSON.stringify({ ...entrada, classesEscolhidas }),
       });
       const corpo = await res.json();
       if (!res.ok) {
@@ -509,7 +518,13 @@ export default function PedidoStep({
           <Campo
             id="classeNice"
             rotulo="Classe de Nice"
-            ajuda="Cada pedido no INPI tem uma classe só. A sugerida vem da sua descrição."
+            ajuda={
+              classesEscolhidas.length > 1
+                ? `Cada protocolo no INPI tem uma classe só. Você marcou ${qtdClasses} classes (${classesEscolhidas
+                    .map((c) => `NCL ${c}`)
+                    .join(", ")}): são ${qtdClasses} protocolos, pagos juntos. Aqui você preenche a lista de produtos e serviços de uma classe; a das outras combinamos com você depois.`
+                : "Cada pedido no INPI tem uma classe só. A sugerida vem da sua descrição."
+            }
           >
             <select
               {...attrs("classeNice")}
@@ -566,23 +581,32 @@ export default function PedidoStep({
         <table style={{ width: "100%", fontSize: 14 }}>
           <tbody>
             <tr>
-              <td>Serviço MarcaSync (análise, petição e protocolo)</td>
+              <td>
+                Serviço MarcaSync (análise, petição e protocolo)
+                {qtdClasses > 1 ? `, ${qtdClasses} classes × ${fmtReais(SETUP_CENTAVOS)}` : ""}
+              </td>
               <td className="tab-nums" style={{ textAlign: "right" }}>
-                {fmtReais(SETUP_CENTAVOS)}
+                {fmtReais(SETUP_CENTAVOS * qtdClasses)}
               </td>
             </tr>
             <tr>
               <td>
                 Taxa do INPI (GRU {especificacaoLivre ? "394, texto livre" : "389, lista do INPI"}
-                ), 1 classe
+                ),{" "}
+                {qtdClasses > 1
+                  ? `${qtdClasses} classes × ${fmtReais(gru.centavos)}`
+                  : "1 classe"}
                 {gru.comDesconto ? " — com 50% de desconto" : ""}
               </td>
               <td className="tab-nums" style={{ textAlign: "right" }}>
-                {fmtReais(gru.centavos)}
+                {fmtReais(gru.centavos * qtdClasses)}
               </td>
             </tr>
             <tr style={{ fontWeight: 600 }}>
-              <td>Total para registrar</td>
+              <td>
+                Total para registrar
+                {qtdClasses > 1 ? ` (${qtdClasses} protocolos num pagamento só)` : ""}
+              </td>
               <td className="tab-nums" style={{ textAlign: "right" }}>
                 {fmtReais(total)}
               </td>

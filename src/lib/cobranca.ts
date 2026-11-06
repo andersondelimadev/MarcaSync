@@ -10,6 +10,7 @@ import {
 import { planoDeEstorno, planoDoPacote, podeEstornar } from "./estorno";
 import { avisarPagamentoConfirmado } from "./avisos";
 import { PARCELAS_MAX_CARTAO, produtoDoPacote, urlDoPedido } from "./pacotes";
+import { contarClasses } from "./planos";
 
 /**
  * Lado servidor do pagamento: cria o checkout do pedido (serviço e taxa do INPI num pagamento só,
@@ -45,10 +46,12 @@ export async function garantirCobrancas(processoId: string): Promise<void> {
       bairro: true,
       cidade: true,
       uf: true,
-      processo: { select: { cliente: { select: { whatsapp: true } } } },
+      processo: { select: { nclCode: true, cliente: { select: { whatsapp: true } } } },
     },
   });
   if (!pedido) return;
+  // Cada classe é um protocolo: o checkout leva o produto de uma classe, na quantidade de classes.
+  const classes = contarClasses(pedido.processo.nclCode);
 
   // Cadastra o pagador no AbacatePay com o que ele já preencheu, para não digitar tudo de novo na
   // página de pagamento. Se falhar, o checkout sai mesmo assim e ele preenche lá.
@@ -92,6 +95,7 @@ export async function garantirCobrancas(processoId: string): Promise<void> {
         metadata: { pagamentoId: pg.id, processoId, tipo: pg.tipo },
         urlDeRetorno: urlDoPedido(processoId),
         parcelasMax: PARCELAS_MAX_CARTAO,
+        quantidade: classes,
         pagadorId,
       });
       // O valor do produto no AbacatePay tem de ser o que o servidor calculou. Se não for (produto
@@ -207,7 +211,12 @@ export async function estornarPagamento(
     where: { id: pagamentoId },
     include: {
       processo: {
-        select: { gruPagaInpiEm: true, protocoladoEm: true, pedidoRegistro: { select: { servicoCentavos: true } } },
+        select: {
+          gruPagaInpiEm: true,
+          protocoladoEm: true,
+          nclCode: true,
+          pedidoRegistro: { select: { servicoCentavos: true } },
+        },
       },
     },
   });
@@ -234,7 +243,10 @@ export async function estornarPagamento(
   };
   if (!opcoes.forcar) {
     if (pg.tipo === "pacote") {
-      const plano = planoDoPacote(situacao, pg.valorCentavos, pg.processo.pedidoRegistro?.servicoCentavos ?? 0);
+      // O serviço é cobrado por classe: devolver o serviço é devolver o de todas as classes.
+      const servico =
+        (pg.processo.pedidoRegistro?.servicoCentavos ?? 0) * contarClasses(pg.processo.nclCode);
+      const plano = planoDoPacote(situacao, pg.valorCentavos, servico);
       if (plano.acao !== "total") {
         throw new ErroEstorno(
           plano.acao === "parcial_manual"

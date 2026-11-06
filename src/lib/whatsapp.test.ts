@@ -139,6 +139,8 @@ describe("mensagemWhatsapp: a linha de risco", () => {
     matches,
     top: matches[0] ?? null,
     ncl: { code: "42", label: "Tecnologia", confidence: "alta" },
+    classesSugeridas: [],
+    classesEscolhidas: ["42"],
     risco: calcularRisco(matches),
   });
 

@@ -1,10 +1,12 @@
 import { similaridade } from "./fonetica";
 import { computeAnalysis } from "./analysis";
 import { buscarMarcas } from "./inpi/busca-client";
-import { inferNCL } from "./ncl";
+import { CLASSES_NICE } from "./classes-nice";
+import type { ClasseSugerida, RespostasQuestionario } from "./classes-tipos";
+import { classesPadrao, sugerirClasses } from "./classes-sugeridas";
 import { buscarMarcasLocais, infoBaseLocal } from "./marcas-locais";
 import type { InferenciaNCL } from "./types";
-import { mesmaArea } from "./classes";
+import { mesmaAreaEmAlguma } from "./classes";
 import { calcularRisco, type RiscoPorArea } from "./risco-area";
 
 /**
@@ -50,7 +52,12 @@ export interface ColidenciaResultado {
   termo: string;
   matches: ColidenciaMatch[];
   top: ColidenciaMatch | null;
+  /** A classe principal (a primeira das escolhidas), para o que ainda mostra uma só. */
   ncl: InferenciaNCL;
+  /** De 1 a 5 classes de Nice que combinam com o negócio (vazio se a descrição não deu pista). */
+  classesSugeridas: ClasseSugerida[];
+  /** As classes marcadas para registrar: no começo as prováveis; a pessoa pode mudar. */
+  classesEscolhidas: string[];
   /** Risco olhando o ramo (classe) das marcas: ver src/lib/risco-area.ts. */
   risco: RiscoPorArea<ColidenciaMatch>;
   /** Presente quando a cópia local dos dados abertos do INPI participou da análise. */
@@ -59,18 +66,35 @@ export interface ColidenciaResultado {
   avisoFonteReal?: string;
 }
 
-function comArea(matches: ColidenciaMatch[], ncl: InferenciaNCL): ColidenciaMatch[] {
+function comArea(matches: ColidenciaMatch[], classes: string[]): ColidenciaMatch[] {
+  const confianca = classes.length > 0 ? "alta" : "baixa";
   return matches.map((m) => ({
     ...m,
-    mesmaArea: mesmaArea(m.classe, ncl.code, ncl.confidence),
+    mesmaArea: mesmaAreaEmAlguma(m.classe, classes, confianca),
   }));
+}
+
+/** A classe principal no formato que o resto da tela já conhece (sem classe confiável: a 35, com confiança baixa). */
+function nclPrincipal(escolhidas: string[]): InferenciaNCL {
+  const classe = escolhidas[0];
+  if (!classe) {
+    return {
+      code: "35",
+      label: "Publicidade e gestão de negócios — classe genérica, refine a descrição para maior precisão",
+      confidence: "baixa",
+    };
+  }
+  return { code: classe, label: CLASSES_NICE[classe] ?? "", confidence: "alta" };
 }
 
 export async function calcularColidencia(
   marca: string,
-  descricao: string
+  descricao: string,
+  respostas?: RespostasQuestionario
 ): Promise<ColidenciaResultado> {
-  const ncl = inferNCL(descricao);
+  const classesSugeridas = sugerirClasses(descricao, respostas);
+  const classesEscolhidas = classesPadrao(classesSugeridas);
+  const ncl = nclPrincipal(classesEscolhidas);
 
   const [ao_vivo, local, info] = await Promise.allSettled([
     buscarMarcas(marca, 1, 10),
@@ -108,7 +132,7 @@ export async function calcularColidencia(
     }
     const matches = comArea(
       [...porProcesso.values()].sort((a, b) => b.pct - a.pct).slice(0, 10),
-      ncl
+      classesEscolhidas
     );
 
     return {
@@ -117,6 +141,8 @@ export async function calcularColidencia(
       matches,
       top: matches[0] ?? null,
       ncl,
+      classesSugeridas,
+      classesEscolhidas,
       risco: calcularRisco(matches),
       ...(baseLocal && local.status === "fulfilled"
         ? {
@@ -140,7 +166,7 @@ export async function calcularColidencia(
       fb: m.fb,
       fonte: "demo" as const,
     })),
-    ncl
+    classesEscolhidas
   );
 
   return {
@@ -149,6 +175,8 @@ export async function calcularColidencia(
     matches,
     top: matches[0] ?? null,
     ncl,
+    classesSugeridas,
+    classesEscolhidas,
     risco: calcularRisco(matches),
     avisoFonteReal: `A busca real no INPI não respondeu agora (${
       err instanceof Error ? err.message : "erro desconhecido"
